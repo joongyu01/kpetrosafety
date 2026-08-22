@@ -1776,10 +1776,6 @@ async function doPinSubmit() {
       $("pinInput2").value = ""; renderPinBoxes2(); updatePinGo(); focusPin("pinInput2");
       return;
     }
-    if (/^(\d)\1{5}$/.test(pin) || pin === "123456" || pin === "654321") {
-      $("pinErr").textContent = "너무 단순한 PIN입니다. 다른 번호를 사용해 주세요.";
-      return;
-    }
   }
 
   busy(true, "인증 중…");
@@ -1960,7 +1956,6 @@ async function doChangePin() {
   const a = ($("cpNew").value || "").replace(/\D/g, ""), b = ($("cpNew2").value || "").replace(/\D/g, "");
   if (a.length !== 6) { $("cpErr").textContent = "숫자 6자리를 입력해 주세요."; return; }
   if (a !== b)        { $("cpErr").textContent = "두 번 입력한 PIN이 서로 다릅니다."; return; }
-  if (/^(\d)\1{5}$/.test(a) || a === "123456") { $("cpErr").textContent = "너무 단순한 PIN입니다."; return; }
   busy(true, "변경 중…");
   try {
     await rpc("sr_pin_change", { p_code: ACCESS_CODE, p_token: session.token, p_new_pin: a });
