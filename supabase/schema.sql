@@ -5,7 +5,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- ┌─────────────────────────────────────────────────────────────────────────┐
--- │ 사이트 접근코드 — 현재 'admin'                                          │
+-- │ 사이트 접근코드 — 현재 'kpetro'                                         │
 -- │   QR 주소에 ?k=<코드> 형태로 들어갑니다.                                │
 -- │                                                                         │
 -- │   ★ 이미 한 번 실행한 뒤에 코드를 바꾸려면 아래 INSERT를 고치는 게      │
@@ -26,7 +26,7 @@ create table if not exists sr_config (
 );
 
 insert into sr_config (id, access_code)
-values (1, 'admin')
+values (1, 'kpetro')
 on conflict (id) do nothing;
 
 create table if not exists sr_dept_pin (
@@ -546,4 +546,4 @@ create policy "sr_photos_upload" on storage.objects
 -- ═══════════════════ 끝 ═══════════════════
 -- 확인용:
 --   select access_code, master_hash is not null as master_set from sr_config;
---   select * from sr_hello('admin');
+--   select * from sr_hello('kpetro');
