@@ -13,6 +13,9 @@
 -- │       update sr_config set access_code = '새코드' where id = 1;         │
 -- └─────────────────────────────────────────────────────────────────────────┘
 
+-- pgcrypto(crypt/gen_salt/gen_random_bytes) — Supabase 는 이 확장을 public 이 아니라
+-- extensions 스키마에 설치한다. 그래서 아래 모든 함수의 search_path 에 extensions 를
+-- 포함시킨다. 일반 PostgreSQL(확장이 public 에 설치됨)에서도 그대로 동작한다.
 create extension if not exists pgcrypto;
 
 -- ═══════════════════ 테이블 ═══════════════════
@@ -81,7 +84,7 @@ create or replace function sr_gate(p_code text)
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if p_code is null or not exists (
@@ -95,7 +98,7 @@ $$;
 create or replace function sr_session_dept(p_token text, out v_dept text, out v_master boolean)
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   delete from sr_session where expires_at < now();
@@ -114,7 +117,7 @@ create or replace function sr_new_token(p_dept text, p_master boolean)
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_token text := encode(gen_random_bytes(24), 'hex');
@@ -137,7 +140,7 @@ create or replace function sr_hello(p_code text)
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_master_set boolean;
@@ -153,7 +156,7 @@ create or replace function sr_list(p_code text)
 returns setof sr_report
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform sr_gate(p_code);
@@ -176,7 +179,7 @@ create or replace function sr_submit(
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_day    text := to_char(now() at time zone 'Asia/Seoul', 'YYMMDD');
@@ -232,7 +235,7 @@ create or replace function sr_pin_state(p_code text, p_dept text)
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_set boolean;
@@ -248,7 +251,7 @@ create or replace function sr_pin_init(p_code text, p_dept text, p_pin text)
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform sr_gate(p_code);
@@ -272,7 +275,7 @@ create or replace function sr_login(p_code text, p_dept text, p_pin text)
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_hash text;
@@ -297,7 +300,7 @@ create or replace function sr_pin_change(p_code text, p_token text, p_new_pin te
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_dept   text;
@@ -326,7 +329,7 @@ create or replace function sr_master_init(p_code text, p_pin text)
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform sr_gate(p_code);
@@ -351,7 +354,7 @@ create or replace function sr_master_login(p_code text, p_pin text)
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_hash text;
@@ -375,7 +378,7 @@ create or replace function sr_master_list(p_code text, p_token text)
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_dept   text;
@@ -402,7 +405,7 @@ create or replace function sr_master_reset(p_code text, p_token text, p_dept tex
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_dept   text;
@@ -437,7 +440,7 @@ create or replace function sr_action(
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_dept   text;
@@ -478,7 +481,7 @@ create or replace function sr_logout(p_token text)
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   delete from sr_session where token = p_token;
