@@ -5,12 +5,13 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- ┌─────────────────────────────────────────────────────────────────────────┐
--- │ ★ 실행 전 여기 한 줄만 바꾸세요 — 사이트 접근코드                        │
--- │   QR 주소에 ?k=<코드> 형태로 들어갑니다. 영문+숫자 6~16자 권장.          │
--- │   나중에 바꾸려면:  update sr_config set access_code='새코드' where id=1;│
+-- │ 사이트 접근코드 — 현재 'admin'                                          │
+-- │   QR 주소에 ?k=<코드> 형태로 들어갑니다.                                │
+-- │                                                                         │
+-- │   ★ 이미 한 번 실행한 뒤에 코드를 바꾸려면 아래 INSERT를 고치는 게      │
+-- │     아니라(멱등이라 무시됨) 이 한 줄을 실행하세요:                      │
+-- │       update sr_config set access_code = '새코드' where id = 1;         │
 -- └─────────────────────────────────────────────────────────────────────────┘
---                                    ↓↓↓↓↓↓↓↓↓↓
---    (아래 sr_config INSERT 문의 'kpetro2026' 부분)
 
 create extension if not exists pgcrypto;
 
@@ -25,7 +26,7 @@ create table if not exists sr_config (
 );
 
 insert into sr_config (id, access_code)
-values (1, 'kpetro2026')
+values (1, 'admin')
 on conflict (id) do nothing;
 
 create table if not exists sr_dept_pin (
@@ -545,4 +546,4 @@ create policy "sr_photos_upload" on storage.objects
 -- ═══════════════════ 끝 ═══════════════════
 -- 확인용:
 --   select access_code, master_hash is not null as master_set from sr_config;
---   select * from sr_hello('kpetro2026');
+--   select * from sr_hello('admin');

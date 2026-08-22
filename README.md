@@ -38,11 +38,14 @@
 대시보드 → **SQL Editor** → 새 쿼리 → [`supabase/schema.sql`](supabase/schema.sql) 전체를
 붙여넣고 **Run**.
 
-> 실행 전 파일 안의 접근코드를 바꾸세요.
+> 접근코드는 현재 **`admin`** 으로 설정되어 있습니다. 파일 안의
 > ```sql
-> insert into sr_config (id, access_code) values (1, 'kpetro2026')
+> insert into sr_config (id, access_code) values (1, 'admin')
 > ```
-> 이 `kpetro2026` 자리가 사이트 접근코드가 되고, QR 주소에 `?k=<코드>`로 들어갑니다.
+> 이 자리가 사이트 접근코드이고, QR 주소에 `?k=<코드>`로 들어갑니다.
+>
+> **이미 한 번 실행한 뒤**에 코드를 바꿀 때는 위 INSERT를 고쳐도 소용없습니다(멱등이라
+> 무시됨). 아래 UPDATE 한 줄을 실행하세요.
 
 두 번 실행해도 안전합니다(멱등). 나중에 코드를 바꾸려면:
 
