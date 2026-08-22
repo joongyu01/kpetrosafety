@@ -1403,10 +1403,17 @@ async function enterApp() {
   if (hit) { qrContext.site = hit.name; $("fSite").value = hit.name; $("qrSite").value = hit.name; }
   if (Q.loc) { qrContext.loc = Q.loc; $("qrLoc").value = Q.loc; }
 
-  try {
-    const raw = sessionStorage.getItem(SS_SESSION);
-    if (raw) session = JSON.parse(raw);
-  } catch (e) { session = null; }
+  /* 관리자 QR(?admin=1)로 들어오면 남아 있던 세션을 반드시 버린다.
+     QR 한 장으로 인증이 통과되는 일이 없도록, 매번 PIN 을 다시 받는다. */
+  if (Q.admin) {
+    session = null;
+    try { sessionStorage.removeItem(SS_SESSION); } catch (e) {}
+  } else {
+    try {
+      const raw = sessionStorage.getItem(SS_SESSION);
+      if (raw) session = JSON.parse(raw);
+    } catch (e) { session = null; }
+  }
 
   try { await DataSource.refresh(); }
   catch (e) { toast(e.message, true); }
