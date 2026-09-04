@@ -1250,7 +1250,7 @@ const ERR_KO = {
   CONTENT_TOO_SHORT:  "상세 내용을 5자 이상 입력해 주세요.",
   TOO_MANY_PHOTOS:    "사진은 최대 3장까지 첨부할 수 있습니다.",
   TOO_LONG:           "입력 내용이 너무 깁니다.",
-  PIN_FORMAT:         "PIN은 숫자 6자리여야 합니다.",
+  PIN_FORMAT:         "비밀번호는 영문·숫자 4~32자여야 합니다.",
   RATE_LIMIT:         "접수 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
   NOT_FOUND:          "대상 신고 건을 찾을 수 없습니다."
 };
@@ -1801,18 +1801,18 @@ async function refreshPinMode() {
   pinMode = isSet ? "login" : "init";
   const target = isMasterChoice() ? "마스터 관리자" : dept;
 
-  $("pinTitle").textContent = pinMode === "init" ? "PIN 최초 설정" : "관리자 암호 인증";
+  $("pinTitle").textContent = pinMode === "init" ? "비밀번호 최초 설정" : "관리자 인증";
   $("pinLabel").textContent = pinMode === "init" ? "사용할 비밀번호" : "담당자 인증 비밀번호";
-  $("pinGo").textContent    = pinMode === "init" ? "PIN 설정하고 진입" : "관리자 페이지 진입";
+  $("pinGo").textContent    = pinMode === "init" ? "비밀번호 설정하고 진입" : "관리자 페이지 진입";
   $("pinModeBox").classList.toggle("show", pinMode === "init");
   $("pinConfirmWrap").classList.toggle("show", pinMode === "init");
   $("pinHint").textContent  = pinMode === "init"
     ? "설정한 비밀번호는 다음부터 로그인에 사용됩니다. (4자 이상)"
     : "지정된 비밀번호를 입력하세요";
-  $("pinModeText").innerHTML = "<b>" + esc(target) + "</b>의 PIN이 아직 없습니다.<br>" +
+  $("pinModeText").innerHTML = "<b>" + esc(target) + "</b>의 비밀번호가 아직 없습니다.<br>" +
     (isMasterChoice()
-      ? "지금 설정하는 PIN이 마스터 PIN이 됩니다. 부서 PIN을 초기화할 수 있는 유일한 수단이니 반드시 따로 보관하세요."
-      : "지금 설정하는 6자리가 이 사업장의 관리자 PIN이 됩니다.");
+      ? "지금 설정하는 값이 마스터 비밀번호가 됩니다. 신고 삭제와 부서 비밀번호 초기화를 할 수 있는 유일한 수단이니 반드시 따로 보관하세요."
+      : "지금 설정하는 값이 이 사업장의 관리자 비밀번호가 됩니다.");
 
   updatePinGo();
 }
