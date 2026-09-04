@@ -9,6 +9,6 @@
      이 파일은 공개 저장소에 그대로 올라갑니다.
 ══════════════════════════════════════════════════════════════ */
 window.SR_CONFIG = {
-  SUPABASE_URL:      "https://fbziigfwqgzefhxxtrmr.supabase.co",
-  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZiemlpZ2Z3cWd6ZWZoeHh0cm1yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczODQxOTMsImV4cCI6MjEwMjk2MDE5M30.RZhyBVjjPun7OqExDS95GYsR1w5hWKrwz8_0pGZk6OI"
+  SUPABASE_URL:      "https://jgkgacuzpoxkjuxcrjxc.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_dk1WP0IeCX01Vw9z89nmzQ_qPqG99PI"
 };

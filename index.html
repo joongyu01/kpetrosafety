@@ -1254,7 +1254,7 @@ async function rpc(fn, args) {
       body: JSON.stringify(args || {})
     });
   } catch (e) {
-    throw new Error("서버에 연결할 수 없습니다. 네트워크를 확인해 주세요.");
+    throw new Error("서버에 연결할 수 없습니다. 네트워크 상태 또는 Supabase 프로젝트 일시정지 여부를 확인해 주세요.");
   }
   const text = await res.text();
   let data = null;
