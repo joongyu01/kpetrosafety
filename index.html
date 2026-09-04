@@ -276,6 +276,10 @@ table.grid tr.clickable:hover td{background:#F7FAF3}
 .pin-box.filled{border-color:var(--green-deep);background:#fff}
 .pin-box.focus{border-color:var(--green-deep);box-shadow:0 0 0 3px rgba(141,198,63,.2)}
 .pin-hidden{position:absolute;opacity:0;pointer-events:none;left:-9999px}
+#pinInput,#pinInput2{width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:10px;
+  font:inherit;font-size:1.05rem;letter-spacing:.12em;background:#FAFBFA;text-align:center}
+#pinInput:focus,#pinInput2:focus{outline:none;border-color:var(--green-deep);
+  box-shadow:0 0 0 3px rgba(141,198,63,.2);background:#fff}
 .pin-err{text-align:center;font-size:.75rem;color:var(--bad);font-weight:600;min-height:20px;margin-top:8px}
 .auth-foot{margin-top:18px;text-align:center}
 .auth-foot button{background:none;border:none;font-size:.75rem;font-weight:600;color:var(--ink-soft);text-decoration:underline;cursor:pointer}
@@ -311,6 +315,12 @@ table.grid tr.clickable:hover td{background:#F7FAF3}
   border-radius:11px;padding:12px 14px;font-size:.75rem;color:#3F5F14;line-height:1.7;margin-bottom:16px;
 }
 .sync-note b{font-weight:800}
+.master-band{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  background:#F3F4F1;border:1px solid var(--line);border-radius:11px;padding:11px 13px}
+.master-band > span{font-size:.76rem;font-weight:800;color:var(--gray-deep);margin-right:auto}
+.master-band .btn{padding:8px 13px;font-size:.78rem}
+.btn-danger{border-color:#E4C6C0!important;color:var(--bad)!important}
+.btn-danger:hover{background:var(--bad-bg)!important}
 
 /* ══════════ QR 생성 ══════════ */
 .qr-layout{display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start}
@@ -518,6 +528,11 @@ body.modal-lock{overflow:hidden}
     </button>
   </div>
 
+  <div id="homeSitePick" style="display:none;padding:14px 18px 0">
+    <label class="hint" style="display:block;margin-bottom:5px;font-weight:600">사업장 선택</label>
+    <select onchange="setViewSite(this.value)" style="width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-size:.92rem;background:#FAFBFA"></select>
+  </div>
+
   <dl class="mini-stats" id="homeStats"></dl>
 
   <div class="list-head">
@@ -609,6 +624,7 @@ body.modal-lock{overflow:hidden}
 
     <div class="filter-bar">
       <select id="flSite"></select>
+      <span class="hint" id="flScopeNote" style="display:none">자기 사업장만 조회됩니다</span>
       <select id="flCat"></select>
       <select id="flStatus"></select>
       <input id="flQuery" placeholder="내용 검색" autocomplete="off">
@@ -653,18 +669,18 @@ body.modal-lock{overflow:hidden}
       </div>
 
       <div class="field" style="margin-bottom:6px">
-        <label id="pinLabel">담당자 인증 PIN 번호</label>
-        <div class="pin-boxes" id="pinBoxes" onclick="focusPin('pinInput')"></div>
-        <input id="pinInput" class="pin-hidden" type="tel" inputmode="numeric" maxlength="6" autocomplete="off">
+        <label id="pinLabel" for="pinInput">담당자 인증 비밀번호</label>
+        <input id="pinInput" type="password" maxlength="32" autocomplete="off"
+               placeholder="비밀번호 입력">
       </div>
 
       <div id="pinConfirmWrap">
         <div class="pin-row-label">한 번 더 입력</div>
-        <div class="pin-boxes" id="pinBoxes2" onclick="focusPin('pinInput2')"></div>
-        <input id="pinInput2" class="pin-hidden" type="tel" inputmode="numeric" maxlength="6" autocomplete="off">
+        <input id="pinInput2" type="password" maxlength="32" autocomplete="off"
+               placeholder="한 번 더 입력">
       </div>
 
-      <p class="hint" style="text-align:center;margin-top:8px" id="pinHint">지정된 비밀번호 6자리를 입력하세요</p>
+      <p class="hint" style="text-align:center;margin-top:8px" id="pinHint">지정된 비밀번호를 입력하세요</p>
       <p class="pin-err" id="pinErr"></p>
 
       <button class="btn btn-green" style="width:100%" id="pinGo" disabled onclick="doPinSubmit()">관리자 페이지 진입</button>
@@ -747,6 +763,18 @@ body.modal-lock{overflow:hidden}
       <button class="btn btn-line" style="flex:1" onclick="go('adminView')">취소</button>
       <button class="btn btn-green" style="flex:2" onclick="saveAction()">저장하기</button>
     </div>
+
+    <div id="masterOnlyRow" style="display:none;margin-top:14px">
+      <div class="master-band">
+        <span>🔑 마스터 관리자 전용</span>
+        <button class="btn btn-line" onclick="openEditReport()">신고 내용 수정</button>
+        <button class="btn btn-line btn-danger" onclick="deleteReport()">신고 삭제</button>
+      </div>
+      <p class="hint" style="margin-top:7px">
+        신고 내용 수정과 삭제는 마스터 관리자만 할 수 있습니다.
+        사업장 담당자는 처리 상태와 조치내역만 입력합니다.
+      </p>
+    </div>
     <div class="copyright">© 2026 Korea Petroleum Quality &amp; Distribution Authority.<div class="cr-sub">Developed by Joongyu Shin.</div></div>
   </div>
 </div>
@@ -823,7 +851,7 @@ body.modal-lock{overflow:hidden}
 </div>
 
 <div class="lightbox" id="lightbox" onclick="this.classList.remove('show')"><img id="lightboxImg" alt="확대 사진"></div>
-<input type="file" id="photoInput" accept="image/*" capture="environment" multiple style="display:none">
+<input type="file" id="photoInput" accept="image/*" multiple style="display:none">
 
 <div class="busy" id="busy"><div class="spinner"></div><p id="busyText">처리 중…</p></div>
 <div class="toast" id="toast"></div>
@@ -1156,7 +1184,8 @@ const SITES = [
   { name:"부산울산경남본부", code:"bun" },
   { name:"대구경북본부",     code:"dgb" },
   { name:"강원본부",         code:"gw"  },
-  { name:"제주본부",         code:"jj"  }
+  { name:"제주본부",         code:"jj"  },
+  { name:"미래기술연구소",   code:"ftr" }
 ];
 const CATEGORIES = ["청사안전", "시설환경", "기타"];
 const STATUSES   = ["처리예정", "처리중", "처리완료"];
@@ -1296,7 +1325,12 @@ const DataSource = {
     return this._cache.slice();
   },
   async refresh() {
-    const rows = await rpc("sr_list", { p_code: ACCESS_CODE });
+    /* 직원은 자기 사업장만, 관리자로 인증하면 전 사업장 */
+    const rows = await rpc("sr_list", {
+      p_code: ACCESS_CODE,
+      p_site: session ? null : (viewSite() || null),
+      p_token: session ? session.token : null
+    });
     this._cache = (rows || []).map(fromDb);
     this._loaded = true;
     this._lastSync = new Date();
@@ -1316,6 +1350,20 @@ setInterval(() => {
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && ACCESS_CODE && DataSource._loaded) DataSource.refresh().catch(() => {});
 });
+
+/* 직원이 볼 사업장 — QR 로 들어온 사업장, 없으면 직접 고른 값 */
+let pickedSite = "";
+function viewSite() {
+  if (qrContext.site) return qrContext.site;
+  if (pickedSite) return pickedSite;
+  try { return localStorage.getItem("sr_view_site") || ""; } catch (e) { return ""; }
+}
+async function setViewSite(name) {
+  pickedSite = name;
+  try { localStorage.setItem("sr_view_site", name); } catch (e) {}
+  try { await DataSource.refresh(); } catch (e) { toast(e.message, true); }
+  renderHome();
+}
 
 /* ═══════════ 뷰 전환 ═══════════ */
 let currentView = "homeView";
@@ -1432,7 +1480,7 @@ async function renderHome() {
     '<div class="mini-stat s-in"><dt>처리중</dt><dd>' + cnt.처리중 + '</dd></div>' +
     '<div class="mini-stat s-done"><dt>처리완료</dt><dd>' + cnt.처리완료 + '</dd></div>';
 
-  $("homeFeed").innerHTML = all.slice(0, 4).map(r =>
+  $("homeFeed").innerHTML = (viewSite() ? all : []).slice(0, 4).map(r =>
     '<div class="feed-item" onclick="openFeed(\'' + esc(r.id) + '\')">' +
       '<div class="feed-body">' +
         '<div class="feed-top">' +
@@ -1444,11 +1492,23 @@ async function renderHome() {
         (r.action ? '<div class="feed-action">' + esc(r.action) + '</div>' : '') +
       '</div>' +
     '</div>'
-  ).join("") || '<div class="empty-note">아직 접수된 신고가 없습니다.<br>첫 신고를 등록해 주세요.</div>';
+  ).join("") || '<div class="empty-note">' + (viewSite()
+      ? '아직 접수된 신고가 없습니다.<br>첫 신고를 등록해 주세요.'
+      : '위에서 사업장을 선택하면<br>해당 사업장의 처리 현황이 표시됩니다.') + '</div>';
 
-  $("homeSite").textContent = qrContext.site
-    ? qrContext.site + (qrContext.loc ? " · " + qrContext.loc : "")
-    : "전 사업장 공용";
+  const vs = viewSite();
+  $("homeSite").textContent = vs
+    ? vs + (qrContext.loc ? " · " + qrContext.loc : "")
+    : "사업장을 선택하세요";
+
+  /* QR 없이 들어온 경우 사업장을 고르게 한다 (사업장별로만 조회되므로) */
+  const picker = $("homeSitePick");
+  if (!qrContext.site) {
+    picker.style.display = "";
+    picker.querySelector("select").value = vs || "";
+  } else {
+    picker.style.display = "none";
+  }
 }
 
 async function openFeed(id) {
@@ -1628,6 +1688,11 @@ function closeDone(next) {
 /* ═══════════ 3단계 · 처리 현황판 ═══════════ */
 async function renderStatus() {
   const all = await DataSource.list();
+  /* 직원은 자기 사업장만 — 필터를 고정한다 */
+  const scoped = !session;
+  $("flSite").disabled = scoped;
+  $("flScopeNote").style.display = scoped ? "" : "none";
+  if (scoped) $("flSite").value = viewSite() || "";
   const cnt = { 처리예정:0, 처리중:0, 처리완료:0 };
   all.forEach(r => { cnt[r.status] = (cnt[r.status] || 0) + 1; });
   const done = cnt.처리완료, rate = all.length ? Math.round(done * 100 / all.length) : 0;
@@ -1737,13 +1802,13 @@ async function refreshPinMode() {
   const target = isMasterChoice() ? "마스터 관리자" : dept;
 
   $("pinTitle").textContent = pinMode === "init" ? "PIN 최초 설정" : "관리자 암호 인증";
-  $("pinLabel").textContent = pinMode === "init" ? "사용할 PIN 6자리" : "담당자 인증 PIN 번호";
+  $("pinLabel").textContent = pinMode === "init" ? "사용할 비밀번호" : "담당자 인증 비밀번호";
   $("pinGo").textContent    = pinMode === "init" ? "PIN 설정하고 진입" : "관리자 페이지 진입";
   $("pinModeBox").classList.toggle("show", pinMode === "init");
   $("pinConfirmWrap").classList.toggle("show", pinMode === "init");
   $("pinHint").textContent  = pinMode === "init"
-    ? "설정한 PIN은 다음부터 로그인에 사용됩니다."
-    : "지정된 비밀번호 6자리를 입력하세요";
+    ? "설정한 비밀번호는 다음부터 로그인에 사용됩니다. (4자 이상)"
+    : "지정된 비밀번호를 입력하세요";
   $("pinModeText").innerHTML = "<b>" + esc(target) + "</b>의 PIN이 아직 없습니다.<br>" +
     (isMasterChoice()
       ? "지금 설정하는 PIN이 마스터 PIN이 됩니다. 부서 PIN을 초기화할 수 있는 유일한 수단이니 반드시 따로 보관하세요."
@@ -1752,24 +1817,13 @@ async function refreshPinMode() {
   updatePinGo();
 }
 
-function renderPinBoxes()  { paintBoxes("pinBoxes",  $("pinInput")); }
-function renderPinBoxes2() { paintBoxes("pinBoxes2", $("pinInput2")); }
-function paintBoxes(boxId, input) {
-  const v = input.value;
-  const focused = document.activeElement === input;
-  let h = "";
-  for (let i = 0; i < 6; i++) {
-    const on = i < v.length;
-    const isCur = focused && i === v.length;
-    h += '<div class="pin-box' + (on ? " filled" : "") + (isCur ? " focus" : "") + '">' + (on ? "•" : "") + '</div>';
-  }
-  $(boxId).innerHTML = h;
-}
-function focusPin(id) { $(id).focus(); renderPinBoxes(); renderPinBoxes2(); }
+function renderPinBoxes()  {}
+function renderPinBoxes2() {}
+function focusPin(id) { $(id).focus(); }
 
 function updatePinGo() {
-  const a = $("pinInput").value, b = $("pinInput2").value;
-  $("pinGo").disabled = pinMode === "init" ? !(a.length === 6 && b.length === 6) : a.length !== 6;
+  const a = $("pinInput").value.trim(), b = $("pinInput2").value.trim();
+  $("pinGo").disabled = pinMode === "init" ? !(a.length >= 4 && b.length >= 4) : a.length < 1;
 }
 
 async function doPinSubmit() {
@@ -1810,6 +1864,9 @@ async function doPinSubmit() {
     session = { token: r.token, dept: r.dept, isMaster: !!r.isMaster };
     try { sessionStorage.setItem(SS_SESSION, JSON.stringify(session)); } catch (e) {}
 
+    /* 인증하면 조회 범위가 전 사업장으로 넓어지므로 다시 불러온다 */
+    try { await DataSource.refresh(); } catch (e) {}
+
     if (pinMode === "init") toast("PIN이 설정되었습니다. 잊지 마세요.");
     else toast((session.isMaster ? "마스터 관리자" : session.dept) + "로 인증되었습니다");
 
@@ -1825,6 +1882,8 @@ async function logout() {
   if (session) { try { await rpc("sr_logout", { p_token: session.token }); } catch (e) {} }
   session = null;
   try { sessionStorage.removeItem(SS_SESSION); } catch (e) {}
+  /* 나가면 다시 자기 사업장 범위로 좁힌다 */
+  try { await DataSource.refresh(); } catch (e) {}
   go("homeView");
 }
 
@@ -1907,6 +1966,8 @@ async function openAction(id) {
 
   $("aContent").value = r.action || "";
   $("aCount").textContent = $("aContent").value.length;
+  editing.row = r;
+  $("masterOnlyRow").style.display = (session && session.isMaster) ? "" : "none";
   renderStatusButtons();
   go("actionView");
 }
@@ -1941,16 +2002,86 @@ async function saveAction() {
   }
 }
 
+/* ═══════════ 마스터 전용 — 신고 내용 수정 · 삭제 ═══════════ */
+function openEditReport() {
+  if (!session || !session.isMaster || !editing || !editing.row) return;
+  const r = editing.row;
+  const opts = (sel) => SITES.map(x =>
+    '<option value="' + esc(x.name) + '"' + (x.name === sel ? ' selected' : '') + '>' +
+    esc(x.name) + '</option>').join("");
+  const cats = CATEGORIES.map(x =>
+    '<option value="' + esc(x) + '"' + (x === r.category ? ' selected' : '') + '>' +
+    esc(x) + '</option>').join("");
+
+  $("masterModalBody").innerHTML =
+    '<h3>신고 내용 수정</h3>' +
+    '<p>접수번호 <b class="mono">' + esc(r.no) + '</b><br>' +
+    '오기·오분류를 바로잡습니다. 수정 이력은 별도로 남지 않습니다.</p>' +
+    '<div class="field" style="text-align:left"><label for="edSite">사업장</label>' +
+    '<select id="edSite">' + opts(r.site) + '</select></div>' +
+    '<div class="two-col">' +
+      '<div class="field" style="text-align:left"><label for="edDept">부서</label>' +
+      '<input id="edDept" value="' + esc(r.dept) + '"></div>' +
+      '<div class="field" style="text-align:left"><label for="edName">성명</label>' +
+      '<input id="edName" value="' + esc(r.reporter) + '"></div>' +
+    '</div>' +
+    '<div class="field" style="text-align:left"><label for="edCat">구분</label>' +
+    '<select id="edCat">' + cats + '</select></div>' +
+    '<div class="field" style="text-align:left"><label for="edLoc">세부 위치</label>' +
+    '<input id="edLoc" value="' + esc(r.location) + '"></div>' +
+    '<div class="field" style="text-align:left"><label for="edContent">상세 내용</label>' +
+    '<textarea id="edContent" maxlength="500" style="min-height:110px">' + esc(r.content) + '</textarea></div>' +
+    '<p class="pin-err" id="edErr"></p>' +
+    '<div class="modal-btns">' +
+      '<button class="btn btn-green" onclick="saveEditReport()">수정 저장</button>' +
+      '<button class="btn btn-line" onclick="closeMaster()">취소</button>' +
+    '</div>';
+  $("masterModal").classList.add("show"); lockScroll(true);
+}
+
+async function saveEditReport() {
+  const content = $("edContent").value.trim();
+  if (content.length < 5) { $("edErr").textContent = "상세 내용을 5자 이상 입력해 주세요."; return; }
+  busy(true, "수정 중…");
+  try {
+    await rpc("sr_edit", {
+      p_code: ACCESS_CODE, p_token: session.token, p_id: editing.id,
+      p_site: $("edSite").value, p_dept: $("edDept").value.trim(),
+      p_reporter: $("edName").value.trim(), p_category: $("edCat").value,
+      p_content: content, p_location: $("edLoc").value.trim()
+    });
+    await DataSource.refresh();
+    busy(false); closeMaster();
+    toast("신고 내용을 수정했습니다");
+    go("adminView");
+  } catch (e) { busy(false); $("edErr").textContent = e.message; }
+}
+
+async function deleteReport() {
+  if (!session || !session.isMaster || !editing) return;
+  const r = editing.row;
+  if (!confirm("이 신고를 삭제할까요?\n\n" + r.no + "  " + r.site + "\n" +
+               r.content.slice(0, 40) + "\n\n삭제하면 되돌릴 수 없습니다.")) return;
+  busy(true, "삭제 중…");
+  try {
+    await rpc("sr_delete", { p_code: ACCESS_CODE, p_token: session.token, p_id: editing.id });
+    await DataSource.refresh();
+    busy(false);
+    toast("신고를 삭제했습니다");
+    go("adminView");
+  } catch (e) { busy(false); handleErr(e); }
+}
+
 /* ═══════════ PIN 변경 / 마스터 관리 ═══════════ */
 function openChangePin() {
   if (!session || session.isMaster) return;
   $("masterModalBody").innerHTML =
     '<h3>PIN 변경</h3>' +
     '<p><b>' + esc(session.dept) + '</b>의 관리자 PIN을 바꿉니다.<br>변경 후에는 새 PIN으로만 로그인됩니다.</p>' +
-    '<div class="field" style="text-align:left"><label for="cpNew">새 PIN 6자리</label>' +
-    '<input id="cpNew" type="tel" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="숫자 6자리"></div>' +
+    '<div class="field" style="text-align:left"><label for="cpNew">새 비밀번호</label>' +
+    '<input id="cpNew" type="password" maxlength="32" autocomplete="off" placeholder="새 비밀번호 (4자 이상)"></div>' +
     '<div class="field" style="text-align:left"><label for="cpNew2">한 번 더 입력</label>' +
-    '<input id="cpNew2" type="tel" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="숫자 6자리"></div>' +
+    '<input id="cpNew2" type="password" maxlength="32" autocomplete="off" placeholder="한 번 더 입력"></div>' +
     '<p class="pin-err" id="cpErr"></p>' +
     '<div class="modal-btns">' +
       '<button class="btn btn-green" onclick="doChangePin()">변경하기</button>' +
@@ -1960,8 +2091,8 @@ function openChangePin() {
 }
 
 async function doChangePin() {
-  const a = ($("cpNew").value || "").replace(/\D/g, ""), b = ($("cpNew2").value || "").replace(/\D/g, "");
-  if (a.length !== 6) { $("cpErr").textContent = "숫자 6자리를 입력해 주세요."; return; }
+  const a = ($("cpNew").value || "").trim(), b = ($("cpNew2").value || "").trim();
+  if (a.length < 4) { $("cpErr").textContent = "4자 이상 입력해 주세요."; return; }
   if (a !== b)        { $("cpErr").textContent = "두 번 입력한 PIN이 서로 다릅니다."; return; }
   busy(true, "변경 중…");
   try {
@@ -2100,8 +2231,6 @@ function bindEvents() {
 
   ["pinInput", "pinInput2"].forEach(id => {
     $(id).addEventListener("input", function () {
-      this.value = this.value.replace(/\D/g, "").slice(0, 6);
-      renderPinBoxes(); renderPinBoxes2();
       updatePinGo();
       $("pinErr").textContent = "";
     });
@@ -2130,6 +2259,7 @@ function fillSelect(el, items, allLabel) {
   fillSelect($("adStatus"), STATUSES, "전체 상태");
   fillSelect($("pinDept"), names.concat([MASTER_OPT]), null);
   fillSelect($("qrSite"), names, null);
+  fillSelect($("homeSitePick").querySelector("select"), names, "사업장을 선택하세요");
   $("qrBase").value = defaultBase();
 
   const LOGO = document.querySelector(".auth-logo").src;

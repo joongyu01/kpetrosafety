@@ -68,6 +68,27 @@ create table if not exists sr_session (
   expires_at timestamptz not null
 );
 
+-- ═══════════════════ 사업장 PIN 사전 설정 ═══════════════════
+-- 전 사업장 초기 비밀번호를 'kpetro' 로 넣어둔다.
+-- (마스터 PIN 은 여기서 설정하지 않는다 — 삭제 권한을 가지므로 별도로 지정할 것)
+-- crypt/gen_salt 는 함수 밖에서는 search_path 를 못 잡으므로 임시 함수로 감싼다.
+create or replace function sr__seed_pins()
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $seed$
+begin
+  insert into sr_dept_pin (dept, pin_hash)
+  select s, crypt('kpetro', gen_salt('bf'))
+    from unnest(array['본사', '수도권남부본부', '수도권북부본부', '대전세종충남본부', '충북본부', '전남광주본부', '전북본부', '부산울산경남본부', '대구경북본부', '강원본부', '제주본부', '미래기술연구소']) as s
+  on conflict (dept) do nothing;
+end;
+$seed$;
+
+select sr__seed_pins();
+drop function sr__seed_pins();
+
 -- ═══════════════════ RLS: 직접 접근 전면 차단 ═══════════════════
 -- 정책을 하나도 만들지 않는다 = anon 키로는 테이블을 읽지도 쓰지도 못한다.
 -- 모든 접근은 아래 SECURITY DEFINER 함수를 통해서만 이뤄진다.
@@ -151,17 +172,40 @@ begin
 end;
 $$;
 
--- ② 신고 목록 (전사 공유 현황판)
-create or replace function sr_list(p_code text)
+-- ② 신고 목록
+--    · 관리자 토큰이 있으면 전 사업장
+--    · 없으면 p_site 로 지정한 사업장 것만 (직원은 자기 사업장만 본다)
+--    · 토큰도 사업장도 없으면 아무것도 돌려주지 않는다
+create or replace function sr_list(p_code text, p_site text default null, p_token text default null)
 returns setof sr_report
 language plpgsql
 security definer
 set search_path = public, extensions
 as $$
+declare
+  v_dept   text;
+  v_master boolean;
+  v_admin  boolean := false;
 begin
   perform sr_gate(p_code);
-  return query
-    select * from sr_report order by created_at desc limit 500;
+
+  if p_token is not null and p_token <> '' then
+    begin
+      select * into v_dept, v_master from sr_session_dept(p_token);
+      v_admin := true;
+    exception when others then
+      v_admin := false;
+    end;
+  end if;
+
+  if v_admin then
+    return query select * from sr_report order by created_at desc limit 1000;
+  elsif p_site is not null and p_site <> '' then
+    return query select * from sr_report where site = p_site
+                 order by created_at desc limit 500;
+  else
+    return;
+  end if;
 end;
 $$;
 
@@ -256,7 +300,7 @@ as $$
 begin
   perform sr_gate(p_code);
 
-  if p_pin !~ '^[0-9]{6}$' then
+  if p_pin !~ '^[A-Za-z0-9!@#$%^&*_-]{4,32}$' then
     raise exception 'PIN_FORMAT' using errcode = '22000';
   end if;
   if exists (select 1 from sr_dept_pin where dept = p_dept) then
@@ -312,7 +356,7 @@ begin
   if v_master then
     raise exception 'MASTER_CANNOT_CHANGE_DEPT_PIN' using errcode = '42501';
   end if;
-  if p_new_pin !~ '^[0-9]{6}$' then
+  if p_new_pin !~ '^[A-Za-z0-9!@#$%^&*_-]{4,32}$' then
     raise exception 'PIN_FORMAT' using errcode = '22000';
   end if;
 
@@ -334,7 +378,7 @@ as $$
 begin
   perform sr_gate(p_code);
 
-  if p_pin !~ '^[0-9]{6}$' then
+  if p_pin !~ '^[A-Za-z0-9!@#$%^&*_-]{4,32}$' then
     raise exception 'PIN_FORMAT' using errcode = '22000';
   end if;
   if exists (select 1 from sr_config where id = 1 and master_hash is not null) then
@@ -489,6 +533,82 @@ begin
 end;
 $$;
 
+-- ⑭ 신고 내용 수정 — 마스터 전용
+create or replace function sr_edit(
+  p_code     text,
+  p_token    text,
+  p_id       uuid,
+  p_site     text,
+  p_dept     text,
+  p_reporter text,
+  p_category text,
+  p_content  text,
+  p_location text default ''
+)
+returns json
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_dept   text;
+  v_master boolean;
+begin
+  perform sr_gate(p_code);
+  select * into v_dept, v_master from sr_session_dept(p_token);
+
+  if not v_master then
+    raise exception 'NOT_MASTER' using errcode = '42501';
+  end if;
+  if p_category not in ('청사안전', '시설환경', '기타') then
+    raise exception 'BAD_CATEGORY' using errcode = '22000';
+  end if;
+  if length(coalesce(p_content, '')) < 5 then
+    raise exception 'CONTENT_TOO_SHORT' using errcode = '22000';
+  end if;
+  if not exists (select 1 from sr_report where id = p_id) then
+    raise exception 'NOT_FOUND' using errcode = '02000';
+  end if;
+
+  update sr_report
+     set site = p_site, dept = p_dept, reporter = p_reporter,
+         category = p_category, content = p_content,
+         location = coalesce(p_location, ''), updated_at = now()
+   where id = p_id;
+
+  return json_build_object('ok', true);
+end;
+$$;
+
+-- ⑮ 신고 삭제 — 마스터 전용
+create or replace function sr_delete(p_code text, p_token text, p_id uuid)
+returns json
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_dept   text;
+  v_master boolean;
+  v_hit    int;
+begin
+  perform sr_gate(p_code);
+  select * into v_dept, v_master from sr_session_dept(p_token);
+
+  if not v_master then
+    raise exception 'NOT_MASTER' using errcode = '42501';
+  end if;
+
+  delete from sr_report where id = p_id;
+  get diagnostics v_hit = row_count;
+
+  if v_hit = 0 then
+    raise exception 'NOT_FOUND' using errcode = '02000';
+  end if;
+  return json_build_object('ok', true);
+end;
+$$;
+
 -- ═══════════════════ 권한 ═══════════════════
 -- 내부 헬퍼는 외부에서 못 부르게, 공개 API만 anon 에게 연다.
 
@@ -497,7 +617,9 @@ revoke all on function sr_session_dept(text)                    from public;
 revoke all on function sr_new_token(text, boolean)              from public;
 
 revoke all on function sr_hello(text)                           from public;
-revoke all on function sr_list(text)                            from public;
+revoke all on function sr_list(text, text, text)                from public;
+revoke all on function sr_edit(text,text,uuid,text,text,text,text,text,text) from public;
+revoke all on function sr_delete(text, text, uuid)              from public;
 revoke all on function sr_submit(text,text,text,text,text,text,text[],text) from public;
 revoke all on function sr_pin_state(text, text)                 from public;
 revoke all on function sr_pin_init(text, text, text)            from public;
@@ -511,7 +633,9 @@ revoke all on function sr_action(text, text, uuid, text, text)  from public;
 revoke all on function sr_logout(text)                          from public;
 
 grant execute on function sr_hello(text)                          to anon, authenticated;
-grant execute on function sr_list(text)                           to anon, authenticated;
+grant execute on function sr_list(text, text, text)               to anon, authenticated;
+grant execute on function sr_edit(text,text,uuid,text,text,text,text,text,text) to anon, authenticated;
+grant execute on function sr_delete(text, text, uuid)             to anon, authenticated;
 grant execute on function sr_submit(text,text,text,text,text,text,text[],text) to anon, authenticated;
 grant execute on function sr_pin_state(text, text)                to anon, authenticated;
 grant execute on function sr_pin_init(text, text, text)           to anon, authenticated;
@@ -550,3 +674,4 @@ create policy "sr_photos_upload" on storage.objects
 -- 확인용:
 --   select access_code, master_hash is not null as master_set from sr_config;
 --   select * from sr_hello('kpetro');
+--   select dept from sr_dept_pin order by dept;   -- 전 사업장 PIN 'kpetro'
