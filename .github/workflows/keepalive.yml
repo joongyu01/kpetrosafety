@@ -1,9 +1,11 @@
 # ═══════════════════════════════════════════════════════════════════════════
 #  Supabase 휴면 방지 (keep-alive)
 #
-#  무료 요금제 프로젝트는 일정 기간 아무 요청도 없으면 일시정지되고,
-#  그대로 더 두면 삭제된다. 이 워크플로가 매일 한 번 DB 에 심박을 한 줄
-#  쓰고 오래된 줄을 지워서(sr_ping) 프로젝트를 계속 '사용 중'으로 만든다.
+#  무료 요금제 프로젝트는 7일간 활동이 적으면 일시정지된다.
+#  공식 문서 기준: "하루에 몇 건의 요청이면 일시정지를 막기에 충분하다."
+#    https://supabase.com/docs/guides/platform/free-project-pausing
+#  그래서 '하루 한 번'이 아니라 하루 2회 × 매회 3건 = 하루 6건을 보낸다.
+#  (예약 작업이 한 번 걸러져도 나머지 한 번이 그날을 메운다)
 #
 #  · 수동 실행: Actions 탭 → 이 워크플로 → Run workflow
 #  · 실패하면 GitHub 가 저장소 소유자에게 메일을 보낸다.
@@ -12,7 +14,8 @@ name: Supabase 휴면 방지
 
 on:
   schedule:
-    - cron: "17 21 * * *"          # 매일 21:17 UTC = 다음날 06:17 KST
+    - cron: "17 21 * * *"          # 21:17 UTC = 다음날 06:17 KST
+    - cron: "17 9 * * *"           # 09:17 UTC = 같은날 18:17 KST
   workflow_dispatch:                # 손으로도 돌릴 수 있게
 
 permissions:
@@ -59,35 +62,61 @@ jobs:
           KEY: ${{ steps.cfg.outputs.key }}
         run: |
           set -uo pipefail
-          NOTE="gh-$(date -u +%Y%m%dT%H%MZ)"
-          for i in 1 2 3; do
-            CODE=$(curl -sS -o body.txt -w '%{http_code}' --max-time 30 \
+          STAMP=$(date -u +%m%dT%H%MZ)
+          LAST_CODE=000
+          LAST_BODY=""
+
+          # 한 번 보내고 성공이면 0 을 돌려준다
+          send() {
+            LAST_CODE=$(curl -sS -o body.txt -w '%{http_code}' --max-time 30 \
               -X POST "$URL/rest/v1/rpc/sr_ping" \
               -H "apikey: $KEY" \
               -H "Authorization: Bearer $KEY" \
               -H "Content-Type: application/json" \
-              -d "{\"p_note\":\"$NOTE\"}" ) || CODE=000
-            BODY=$(cat body.txt 2>/dev/null || true)
-            echo "시도 $i · HTTP $CODE · $BODY"
-            if [ "$CODE" = "200" ] && echo "$BODY" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
-              echo "### ✅ 심박 성공" >> "$GITHUB_STEP_SUMMARY"
-              echo '```json' >> "$GITHUB_STEP_SUMMARY"
-              echo "$BODY" >> "$GITHUB_STEP_SUMMARY"
-              echo '```' >> "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-            [ "$i" != "3" ] && sleep 30
+              -d "{\"p_note\":\"$1\"}") || LAST_CODE=000
+            LAST_BODY=$(cat body.txt 2>/dev/null || true)
+            [ "$LAST_CODE" = "200" ] && echo "$LAST_BODY" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'
+          }
+
+          OK=0
+          for n in 1 2 3; do
+            for try in 1 2 3; do
+              if send "gh-$STAMP-$n"; then
+                OK=$((OK + 1))
+                echo "[$n/3] 성공 · $LAST_BODY"
+                break
+              fi
+              echo "[$n/3] 시도 $try 실패 · HTTP $LAST_CODE · $LAST_BODY"
+              [ "$try" != "3" ] && sleep 20
+            done
+            [ "$n" != "3" ] && sleep 5
           done
-          echo "::error::Supabase 심박 실패 (HTTP $CODE). 프로젝트가 일시정지됐거나 스키마가 아직 적용되지 않았을 수 있습니다."
-          echo "### ❌ 심박 실패 — HTTP $CODE" >> "$GITHUB_STEP_SUMMARY"
-          echo "$BODY" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
+
+          {
+            if [ "$OK" -eq 3 ]; then echo "### ✅ 심박 3/3 성공";
+            elif [ "$OK" -ge 1 ]; then echo "### ⚠️ 심박 $OK/3 성공 — DB 는 살아 있음";
+            else echo "### ❌ 심박 0/3 — HTTP $LAST_CODE"; fi
+            echo ''
+            echo '```json'
+            echo "${LAST_BODY:-<응답 없음>}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$OK" -eq 0 ]; then
+            echo "::error::Supabase 심박 전부 실패 (HTTP $LAST_CODE). 프로젝트가 일시정지됐거나 sr_ping 이 아직 없을 수 있습니다."
+            exit 1
+          fi
+          if [ "$OK" -lt 3 ]; then
+            echo "::warning::심박 $OK/3 만 성공했습니다. 연속으로 이러면 프로젝트 상태를 확인하세요."
+          fi
 
       # GitHub 은 '저장소에 60일간 아무 활동이 없으면' 예약 워크플로를 자동으로 꺼 버린다.
       # 그러면 심박도 같이 멈춘다. 그래서 25일에 한 번 날짜 파일을 갱신해 활동을 남긴다.
+      # 저장소의 Actions 토큰이 읽기 전용이면 여기서 막히지만, 심박 자체는 이미 끝났으므로
+      # 작업을 실패로 만들지 않는다.
       - name: 저장소 활동 갱신
         if: github.event_name == 'schedule'
-        continue-on-error: true          # 여기서 막혀도 심박(위 단계)은 이미 성공한 것
+        continue-on-error: true
         run: |
           set -euo pipefail
           STAMP=.github/keepalive-stamp.txt
