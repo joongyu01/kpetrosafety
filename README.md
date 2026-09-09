@@ -160,6 +160,8 @@ kpetrosafety/
 ├── index.html            앱 전체 (단일 파일)
 ├── config.js             Supabase 연결 정보 ← 여기만 채우면 됨
 ├── supabase/schema.sql   DB 스키마 · RPC 함수 · 권한 · 스토리지
+├── .github/workflows/
+│   └── keepalive.yml     매일 Supabase 를 깨우는 예약 작업 (§8)
 ├── .nojekyll             GitHub Pages Jekyll 처리 비활성화
 └── README.md
 ```
@@ -187,7 +189,46 @@ select site, status, count(*) from sr_report group by site, status order by site
 
 ---
 
-## 8. 운영 전 정해야 할 것
+## 8. 휴면 방지 (무료 요금제)
+
+Supabase 무료 프로젝트는 **일정 기간 아무 요청도 없으면 일시정지**되고, 그대로 더 두면
+삭제됩니다. 실제로 한 번 프로젝트가 사라져 신고 데이터와 비밀번호를 모두 잃었습니다.
+
+그래서 GitHub Actions 가 **매일 한 번 DB 를 건드리도록** 해 두었습니다.
+
+```
+매일 06:17 KST ─> POST /rest/v1/rpc/sr_ping
+                    ├ sr_heartbeat 에 한 줄 기록      (실제 쓰기 = 확실한 활동)
+                    ├ 오래된 심박 삭제 (최근 30건만)  (표가 자라지 않음)
+                    └ 만료된 로그인 세션 청소
+```
+
+| 항목 | 값 |
+|---|---|
+| 워크플로 | [`.github/workflows/keepalive.yml`](.github/workflows/keepalive.yml) |
+| 주기 | 매일 1회 (일시정지 기준보다 훨씬 짧음) |
+| 실패 시 | 30초 간격 3회 재시도 → 그래도 실패하면 작업 실패 → **GitHub 이 소유자에게 메일** |
+| 수동 실행 | Actions 탭 → *Supabase 휴면 방지* → **Run workflow** |
+| 접속 정보 | `config.js` 를 그대로 읽음. 저장소 시크릿 `SUPABASE_URL` / `SUPABASE_ANON_KEY` 를 넣으면 그쪽이 우선 |
+
+`sr_ping` 은 **접근코드를 요구하지 않습니다.** 워크플로 파일이 공개 저장소에 있어
+코드를 적어 둘 수 없기 때문입니다. 대신 하는 일이 심박 한 줄 쓰기와 청소뿐이라
+아무나 불러도 새어 나가는 정보도, 늘어나는 데이터도 없습니다.
+
+> **왜 날짜 파일을 커밋하나요?**
+> GitHub 은 저장소에 60일간 아무 활동이 없으면 예약 워크플로를 자동으로 꺼 버립니다.
+> 그러면 심박도 같이 멈춥니다. 그래서 25일에 한 번 `.github/keepalive-stamp.txt` 의
+> 날짜만 갱신해 활동 기록을 남깁니다(연 14회 남짓).
+
+### 그래도 남는 위험
+
+예약 작업은 GitHub 사정으로 밀리거나 걸러질 수 있고, 저장소를 보관(archive)하면 멈춥니다.
+**한 달에 한 번쯤 Actions 탭에 초록불이 이어지는지 봐 주세요.** 그리고 휴면 방지는
+백업이 아닙니다 — 분기마다 현황판에서 CSV 를 한 번 내려받아 두는 편이 안전합니다.
+
+---
+
+## 9. 운영 전 정해야 할 것
 
 | 항목 | 현재 | 검토 필요 |
 |---|---|---|

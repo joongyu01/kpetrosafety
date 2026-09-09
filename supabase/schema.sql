@@ -68,6 +68,15 @@ create table if not exists sr_session (
   expires_at timestamptz not null
 );
 
+-- 무료 요금제 휴면(장기 미사용 시 프로젝트 일시정지 → 삭제) 방지용 심박 기록.
+-- GitHub Actions 가 매일 sr_ping() 을 불러 여기에 한 줄 쓰고 오래된 줄을 지운다.
+-- 최근 30건만 남으므로 표가 자라지 않는다.
+create table if not exists sr_heartbeat (
+  id   bigint      generated always as identity primary key,
+  at   timestamptz not null default now(),
+  note text        not null default ''
+);
+
 -- ═══════════════════ 사업장 PIN 사전 설정 ═══════════════════
 -- 전 사업장 초기 비밀번호를 'kpetro' 로 넣어둔다.
 -- (마스터 PIN 은 여기서 설정하지 않는다 — 삭제 권한을 가지므로 별도로 지정할 것)
@@ -98,6 +107,7 @@ alter table sr_config   enable row level security;
 alter table sr_dept_pin enable row level security;
 alter table sr_report   enable row level security;
 alter table sr_session  enable row level security;
+alter table sr_heartbeat enable row level security;
 
 -- ═══════════════════ 내부 헬퍼 ═══════════════════
 
@@ -609,6 +619,39 @@ begin
 end;
 $$;
 
+-- ⑯ 심박(keep-alive) — 접근코드 없이 부를 수 있다
+--    · 워크플로 파일은 공개 저장소에 있으므로 접근코드를 넣지 않는다.
+--    · 하는 일은 심박 한 줄 쓰기 + 오래된 줄/만료 세션 청소뿐이라
+--      아무나 불러도 새어 나가는 정보도, 늘어나는 데이터도 없다.
+create or replace function sr_ping(p_note text default null)
+returns json
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_id      bigint;
+  v_reports bigint;
+begin
+  insert into sr_heartbeat (note)
+  values (left(coalesce(p_note, 'keepalive'), 40))
+  returning id into v_id;
+
+  -- 최근 30건만 남긴다
+  delete from sr_heartbeat
+   where id not in (select id from sr_heartbeat order by id desc limit 30);
+
+  -- 만료된 로그인 세션도 겸사겸사 청소
+  delete from sr_session where expires_at < now();
+
+  select count(*) into v_reports from sr_report;
+
+  return json_build_object(
+    'ok', true, 'at', now(), 'beats', v_id, 'reports', v_reports
+  );
+end;
+$$;
+
 -- ═══════════════════ 권한 ═══════════════════
 -- 내부 헬퍼는 외부에서 못 부르게, 공개 API만 anon 에게 연다.
 
@@ -631,6 +674,7 @@ revoke all on function sr_master_list(text, text)               from public;
 revoke all on function sr_master_reset(text, text, text)        from public;
 revoke all on function sr_action(text, text, uuid, text, text)  from public;
 revoke all on function sr_logout(text)                          from public;
+revoke all on function sr_ping(text)                            from public;
 
 grant execute on function sr_hello(text)                          to anon, authenticated;
 grant execute on function sr_list(text, text, text)               to anon, authenticated;
@@ -647,6 +691,7 @@ grant execute on function sr_master_list(text, text)              to anon, authe
 grant execute on function sr_master_reset(text, text, text)       to anon, authenticated;
 grant execute on function sr_action(text, text, uuid, text, text) to anon, authenticated;
 grant execute on function sr_logout(text)                         to anon, authenticated;
+grant execute on function sr_ping(text)                           to anon, authenticated;
 
 -- ═══════════════════ 사진 저장소 ═══════════════════
 -- 3MB 이하 이미지만, 공개 읽기 / 익명 업로드 허용
@@ -675,3 +720,5 @@ create policy "sr_photos_upload" on storage.objects
 --   select access_code, master_hash is not null as master_set from sr_config;
 --   select * from sr_hello('kpetro');
 --   select dept from sr_dept_pin order by dept;   -- 전 사업장 PIN 'kpetro'
+--   select * from sr_ping('manual');              -- 휴면 방지 심박 수동 확인
+--   select at, note from sr_heartbeat order by id desc limit 10;

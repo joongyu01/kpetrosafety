@@ -1,0 +1,111 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  Supabase 휴면 방지 (keep-alive)
+#
+#  무료 요금제 프로젝트는 일정 기간 아무 요청도 없으면 일시정지되고,
+#  그대로 더 두면 삭제된다. 이 워크플로가 매일 한 번 DB 에 심박을 한 줄
+#  쓰고 오래된 줄을 지워서(sr_ping) 프로젝트를 계속 '사용 중'으로 만든다.
+#
+#  · 수동 실행: Actions 탭 → 이 워크플로 → Run workflow
+#  · 실패하면 GitHub 가 저장소 소유자에게 메일을 보낸다.
+# ═══════════════════════════════════════════════════════════════════════════
+name: Supabase 휴면 방지
+
+on:
+  schedule:
+    - cron: "17 21 * * *"          # 매일 21:17 UTC = 다음날 06:17 KST
+  workflow_dispatch:                # 손으로도 돌릴 수 있게
+
+permissions:
+  contents: write                   # 아래 '저장소 활동 갱신' 단계에서 필요
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 접속 정보는 config.js 를 그대로 쓴다(단일 출처).
+      # 저장소 시크릿 SUPABASE_URL / SUPABASE_ANON_KEY 를 넣어두면 그쪽이 우선.
+      # ※ anon(sb_publishable_) 키는 원래 공개용이라 config.js 에 있어도 된다.
+      #    service_role(sb_secret_) 키는 여기에도, 시크릿에도 넣지 말 것.
+      - name: 접속 정보 읽기
+        id: cfg
+        env:
+          SECRET_URL: ${{ secrets.SUPABASE_URL }}
+          SECRET_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          URL="${SECRET_URL:-$(sed -n 's/.*SUPABASE_URL:[^"]*"\([^"]*\)".*/\1/p' config.js | head -1)}"
+          KEY="${SECRET_KEY:-$(sed -n 's/.*SUPABASE_ANON_KEY:[^"]*"\([^"]*\)".*/\1/p' config.js | head -1)}"
+          URL="${URL%/}"
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "::error::config.js 에서 Supabase 접속 정보를 찾지 못했습니다."
+            exit 1
+          fi
+          echo "대상 $URL"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$KEY"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+
+      - name: 심박 보내기
+        env:
+          URL: ${{ steps.cfg.outputs.url }}
+          KEY: ${{ steps.cfg.outputs.key }}
+        run: |
+          set -uo pipefail
+          NOTE="gh-$(date -u +%Y%m%dT%H%MZ)"
+          for i in 1 2 3; do
+            CODE=$(curl -sS -o body.txt -w '%{http_code}' --max-time 30 \
+              -X POST "$URL/rest/v1/rpc/sr_ping" \
+              -H "apikey: $KEY" \
+              -H "Authorization: Bearer $KEY" \
+              -H "Content-Type: application/json" \
+              -d "{\"p_note\":\"$NOTE\"}" ) || CODE=000
+            BODY=$(cat body.txt 2>/dev/null || true)
+            echo "시도 $i · HTTP $CODE · $BODY"
+            if [ "$CODE" = "200" ] && echo "$BODY" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
+              echo "### ✅ 심박 성공" >> "$GITHUB_STEP_SUMMARY"
+              echo '```json' >> "$GITHUB_STEP_SUMMARY"
+              echo "$BODY" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            [ "$i" != "3" ] && sleep 30
+          done
+          echo "::error::Supabase 심박 실패 (HTTP $CODE). 프로젝트가 일시정지됐거나 스키마가 아직 적용되지 않았을 수 있습니다."
+          echo "### ❌ 심박 실패 — HTTP $CODE" >> "$GITHUB_STEP_SUMMARY"
+          echo "$BODY" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      # GitHub 은 '저장소에 60일간 아무 활동이 없으면' 예약 워크플로를 자동으로 꺼 버린다.
+      # 그러면 심박도 같이 멈춘다. 그래서 25일에 한 번 날짜 파일을 갱신해 활동을 남긴다.
+      - name: 저장소 활동 갱신
+        if: github.event_name == 'schedule'
+        continue-on-error: true          # 여기서 막혀도 심박(위 단계)은 이미 성공한 것
+        run: |
+          set -euo pipefail
+          STAMP=.github/keepalive-stamp.txt
+          TODAY=$(date -u +%Y-%m-%d)
+          LAST=$(head -1 "$STAMP" 2>/dev/null | tr -dc '0-9-' || true)
+          DAYS=999
+          if [ -n "$LAST" ]; then
+            DAYS=$(( ( $(date -u -d "$TODAY" +%s) - $(date -u -d "$LAST" +%s) ) / 86400 )) || DAYS=999
+          fi
+          echo "마지막 기록 ${LAST:-없음} · ${DAYS}일 전"
+          if [ "$DAYS" -lt 25 ]; then
+            echo "아직 갱신할 때가 아닙니다."
+            exit 0
+          fi
+          mkdir -p .github
+          printf '%s\n' "$TODAY" > "$STAMP"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$STAMP"
+          git commit -m "휴면 방지: 저장소 활동 기록 $TODAY"
+          git push || { git pull --rebase --autostash && git push; }
