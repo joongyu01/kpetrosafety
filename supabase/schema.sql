@@ -68,9 +68,11 @@ create table if not exists sr_session (
   expires_at timestamptz not null
 );
 
--- 무료 요금제 휴면(장기 미사용 시 프로젝트 일시정지 → 삭제) 방지용 심박 기록.
--- GitHub Actions 가 매일 sr_ping() 을 불러 여기에 한 줄 쓰고 오래된 줄을 지운다.
--- 최근 30건만 남으므로 표가 자라지 않는다.
+-- 무료 요금제 휴면 방지용 심박 기록.
+-- 무료 프로젝트는 7일간 활동이 적으면 일시정지된다(정지 후 1년 안에는 복구 가능하나
+-- 방치하면 잃는다). GitHub Actions 가 하루 두 번 sr_ping() 을 불러 여기에 한 줄 쓰고
+-- 오래된 줄을 지운다. 최근 30건만 남으므로 표가 자라지 않는다.
+-- https://supabase.com/docs/guides/platform/free-project-pausing
 create table if not exists sr_heartbeat (
   id   bigint      generated always as identity primary key,
   at   timestamptz not null default now(),
